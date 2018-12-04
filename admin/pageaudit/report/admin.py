@@ -7,7 +7,7 @@ class LighthouseRunAdmin(admin.ModelAdmin):
 
 class UrlAdmin(admin.ModelAdmin):
     search_fields = ["url"]
-    readonly_fields = ["lighthouse_run", "url_kpi_average"]
+    readonly_fields = ["lighthouse_run", "url_kpi_average", "url_paths", "search_key_vals"]
 
 class UrlKpiAverageAdmin(admin.ModelAdmin):
     readonly_fields = ["url"]
@@ -27,6 +27,7 @@ admin.site.register(LighthouseDataRaw, LighthouseDataRawAdmin)
 admin.site.register(LighthouseDataUsertiming)
 admin.site.register(LighthouseRun, LighthouseRunAdmin)
 admin.site.register(PageView)
+admin.site.register(Team)
 admin.site.register(Url, UrlAdmin)
 admin.site.register(UrlKpiAverage, UrlKpiAverageAdmin)
 admin.site.register(UserTimingMeasure, UserTimingMeasureAdmin)

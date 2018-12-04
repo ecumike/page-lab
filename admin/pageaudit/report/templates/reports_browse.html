@@ -26,7 +26,7 @@
             
             (function ($) {
                 
-                var $sortForm, $loadmoreContainer, $cardContainer, pageNum = 1;
+                var $filterForm, $loadmoreContainer, $cardContainer, pageNum = 1;
                 
                 
                 function setupLoadMore () {
@@ -36,9 +36,8 @@
                 
                 function loadMoreCards () {
                     $.ajax({
-                        url: "{% url 'plr:api_home_items' %}?page=" + (pageNum + 1),
+                        url: "{% url 'plr:api_browse_items' %}?page=" + (pageNum + 1) + "&{{ request.GET.urlencode }}",
                         dataType: "json",
-                        data: $sortForm.serialize(),
                         success: function (data) {
                             $cardContainer.append(data.resultsHtml);
                             
@@ -55,10 +54,28 @@
                 }
                 
                 
-                $(function () {
+                // If the select list item doesn't have a value selected, don't submit it.
+                // Prevents empty params from showing in URL
+                function setupFilterform () {
+                    $filterForm.on("submit", function (evt) {
+                        $(this).find('select')
+                            .filter(function () {
+                                return !this.value;
+                            })
+                            .prop('name', '');
+                    });
+                }
+                
+                
+                $(function () {    
                     $cardContainer = $("#pl-cards-container");
                     $loadmoreContainer = $("#pl-loadmore");
-                    $sortForm = $("#pl-sortform");
+                    $filterForm = $("#pl-filterform");
+                    
+                    // Setup select2 widgets.
+                    $("select").select2({
+                        minimumResultsForSearch: 8
+                    });
                     
                     if ($loadmoreContainer[0]) {
                         setupLoadMore();
@@ -68,10 +85,7 @@
                     PL.compare.setupCompareCheckboxes($("#pl-cards-container"));
                     PL.compare.preselectCheckbox($("input:checkbox"));
                     
-                    // Setup select2 widgets.
-                    $("select").select2({
-                        minimumResultsForSearch: 8
-                    });
+                    setupFilterform();
                 });
                 
             })(jQuery);
@@ -84,45 +98,51 @@
 
 {% block content %}
 
-	<div class="{{ templateHelpers.classes.grid }} mt4">
-        <form id="pl-sortform" aria-label="Sort data listing" action="" method="get">
-            <div class="mb3 dib mr2">
-                <p class="b mt0">Sort:</p>
-                <select name="sortby" aria-label="Select a field">
-                    <option value="url" {% if sortby == 'url' %}selected="selected"{% endif %}>URL</option>
-                    <option value="date" {% if sortby == 'date' %}selected="selected"{% endif %}>Last test date</option>
-                    <option value="a11yscore" {% if sortby == 'a11yscore' %}selected="selected"{% endif %}>Accessibility score</option>
-                    <option value="perfscore" {% if sortby == 'perfscore' %}selected="selected"{% endif %}>Performance score</option>
-                    <option value="seoscore" {% if sortby == 'seoscore' %}selected="selected"{% endif %}>SEO score</option>
-                </select>
-            </div>
-            
-            <div class="mb3 dib mr4">
-                <select name="sortorder" aria-label="Select an order">
-                    <option value="asc" {% if sortorder == 'asc' %}selected="selected"{% endif %}>Ascending</option>
-                    <option value="desc" {% if sortorder == 'desc' %}selected="selected"{% endif %}>Descending</option>
-                </select>
-            </div>
-            
+	<form id="pl-filterform" aria-label="Sort data listing" action="" method="get">
         
-            <div class="mb3 dib mr4">
-                <p class="b mt0">Show:</p>
-                <select name="viewdata" aria-label="Select an order">
-                    <option value="perfscore" {% if viewdata == 'perfscore' %}selected="selected"{% endif %}>Performance score</option>
-                    <option value="a11yscore" {% if viewdata == 'a11yscore' %}selected="selected"{% endif %}>Accessibility score</option>
-                    <option value="seoscore" {% if viewdata == 'seoscore' %}selected="selected"{% endif %}>SEO score</option>
-                </select>
+        <div class="{{ templateHelpers.classes.grid }} mt4">
+            
+            <div class="flex flex-wrap items-end">
+                <div class="mb3 mr2">
+                    <p class="b mt0">Sort:</p>
+                    <select name="sortby" aria-label="Select a field">
+                        <option value="url" {% if sortby == 'url' %}selected="selected"{% endif %}>URL</option>
+                        <option value="date" {% if sortby == 'date' %}selected="selected"{% endif %}>Last test date</option>
+                        <option value="a11yscore" {% if sortby == 'a11yscore' %}selected="selected"{% endif %}>Accessibility score</option>
+                        <option value="perfscore" {% if sortby == 'perfscore' %}selected="selected"{% endif %}>Performance score</option>
+                        <option value="seoscore" {% if sortby == 'seoscore' %}selected="selected"{% endif %}>SEO score</option>
+                    </select>
+                </div>
+                
+                <div class="mb3 mr4">
+                    <select name="sortorder" aria-label="Select an order">
+                        <option value="asc" {% if sortorder == 'asc' %}selected="selected"{% endif %}>Ascending</option>
+                        <option value="desc" {% if sortorder == 'desc' %}selected="selected"{% endif %}>Descending</option>
+                    </select>
+                </div>
+                
+            
+                <div class="mb3 mr4">
+                    <p class="b mt0">Show:</p>
+                    <select name="viewdata" aria-label="Select an order">
+                        <option value="perfscore" {% if viewdata == 'perfscore' %}selected="selected"{% endif %}>Performance score</option>
+                        <option value="a11yscore" {% if viewdata == 'a11yscore' %}selected="selected"{% endif %}>Accessibility score</option>
+                        <option value="seoscore" {% if viewdata == 'seoscore' %}selected="selected"{% endif %}>SEO score</option>
+                    </select>
+                </div>
+                        
+                {% include "partials/url_filter_select.html" with filter=filter filters=filters view_name='browse' %}
+                
+                <div class="mr3">
+                    <button id="pl-filter-apply" type="submit" class="{{ templateHelpers.classes.smallButton }} {{ templateHelpers.classes.bluePriButton }} relative">Apply</button>
+                </div>
             </div>
-                    
-            <div class="mb3 dib mr3">
-                <button type="submit" class="{{ templateHelpers.classes.smallButton }} {{ templateHelpers.classes.bluePriButton }} relative" style="top:2px;">Apply</button>
-            </div>
-               
-        </form>
-	</div>
+	    </div>
+	    
+	</form>
 	
 	
-	<div id="pl-cards-container" class="{{ templateHelpers.classes.grid }} mt4 flex flex-wrap center">
+	<div id="pl-cards-container" class="{{ templateHelpers.classes.grid }} mt5 flex flex-wrap">
         {% for url in urls %}
             {% include "partials/report_card.html" with url=url %}
         {% endfor %}	  

@@ -4,7 +4,7 @@ from urllib import parse
 from django.contrib.postgres.fields import JSONField
 from django.contrib.auth.models import User, Group
 from django.db import models
-from django.db.models import Avg, Max, Min, Q, Sum
+from django.db.models import Avg, Max, Min, Q, Sum, F
 from collections import namedtuple
 
 from .helpers import *
@@ -12,18 +12,22 @@ from .helpers import *
 
 ## Custom Url object filters mapped to functions.
 ## These are chainable preset filters instead of using .all or .filter() all the time
+
+##
+## URL preset chainable queries.
+##
 class UrlQueryset(models.QuerySet):
     """
     Get all URLs that are set to 'active'. Omits 'inactive' URLs.
     Usage:
         Url.objects.allActive()
-    
-    Get all URLs that have at least 1 valid run. 
+
+    Get all URLs that have at least 1 valid run.
     No runs == no averages, and it would show improper percentages.
     Usage:
         Url.objects.withValidRuns()
     """
-    
+
     def allActive(self):
         return self.filter(inactive=False)
 
@@ -41,14 +45,35 @@ class UrlManger(models.Manager):
         return self.get_queryset().withValidRuns()
 
 
+##
+## LighthouseRun preset chainable queries.
+##
+class LighthouseRunQueryset(models.QuerySet):
+    """
+    Filter out runs that are invalid.
+    Usage:
+        LighthouseRun.objects.validRuns()
+    """
+
+    def validRuns(self):
+        return self.filter(number_network_requests__gt=1, performance_score__gt=5, invalid_run=False)
+
+class LighthouseRunManger(models.Manager):
+    def get_queryset(self):
+        return LighthouseRunQueryset(self.model, using=self._db)  ## IMPORTANT KEY ITEM.
+
+    def validRuns(self):
+        return self.get_queryset().validRuns()
+
+
 class LighthouseRun(models.Model):
     """
     Main pointer for a lighthouse run. Each run for a URL creates one of these with
-    relationship to the URL it was for. Allows you to get averages for all runs 
-    associated with a given URL. 
+    relationship to the URL it was for. Allows you to get averages for all runs
+    associated with a given URL.
     The Url.object has a specific relationship to it's latest LighthouseRun.
     """
-    
+
     created_date = models.DateTimeField(auto_now_add=True)
     url = models.ForeignKey('Url',
                             related_name='lighthouse_run_url',
@@ -85,9 +110,13 @@ class LighthouseRun(models.Model):
     ## REMOVE THIS after new user-timing models are POPULATED WITH THE DATA.
     masthead_onscreen = models.PositiveIntegerField(default=0)
 
-
     class Meta:
         ordering = ['-created_date']
+
+        indexes = [
+            models.Index(fields=['created_date',]),
+            models.Index(fields=['url',]),
+        ]
 
     def __str__(self):
         return 'perf: %s - requests: %s' % (self.performance_score, self.number_network_requests,)
@@ -97,7 +126,7 @@ class UrlOwner(models.Model):
     """
     An owner entity of a url: department, company, team.
     """
-    
+
     created_date = models.DateTimeField(auto_now_add=True, editable=False)
     modified_date = models.DateTimeField(auto_now=True, editable=False)
     owner_name = models.CharField(max_length=64)
@@ -115,11 +144,10 @@ class UrlOwner(models.Model):
 class Url(models.Model):
     """
     A Url to test.
-    Points to it's latest LighthouseRun and UrlKpiAverage object. 
-    It can be set to 'inactive' so it can be kept, but not currently tested, 
+    Points to it's latest LighthouseRun and UrlKpiAverage object.
+    It can be set to 'inactive' so it can be kept, but not currently tested,
     and is split into parts for URL report filtering/search capabilities.
     """
-    
     created_date = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(User,
                                    related_name='url_created_by',
@@ -168,6 +196,10 @@ class Url(models.Model):
 
     class Meta:
         ordering = ['url']
+
+        indexes = [
+            models.Index(fields=['url',]),
+        ]
 
     def __str__(self):
         return "%s" % (self.url,)
@@ -219,14 +251,13 @@ class Url(models.Model):
         else:
             super(Url, self).save(*args, **kwargs)
 
-
     def getUrls(options):
         """
         Get a list of URLs, sorted, and return only ones with at least 1 valid run in the book.
         Otherwise you could have a list of a bunch of URLs that don't have any runs yet.
-        
+
         """
-        
+
         allowedSortby = {
             'url': 'url',
             'date': 'lighthouse_run__created_date',
@@ -237,7 +268,7 @@ class Url(models.Model):
 
         defSortby = "date"
         defSortorder = "-"
-        defFilter = None
+        defUrlIds = []
 
         ## Sort by.
         try:
@@ -258,10 +289,28 @@ class Url(models.Model):
         except Exception as ex:
             userSortorder = defSortorder
 
+        try:
+            urlIds = options['ids']
+        except Exception as ex:
+            urlIds = defUrlIds
+
         ## Map sortorder field to proper query filter condition.
         querySortorder = "" if userSortorder == "asc" else defSortorder
 
-        return Url.objects.withValidRuns().prefetch_related("lighthouse_run").prefetch_related("url_kpi_average").order_by(querySortorder + querySortby)
+
+        urls = Url.objects.prefetch_related("lighthouse_run").prefetch_related("url_kpi_average")
+        
+        ## Do a special sorting procedure to put null values first if ascending, last if order is descending.
+        ## By default, Django always puts null date fields first no matter what.
+        if querySortorder == "":
+            urls = urls.order_by(F(querySortby).asc(nulls_first=True))
+        else:
+            urls = urls.order_by(F(querySortby).desc(nulls_last=True))
+        
+        if len(urlIds) > 0:
+            urls = urls.filter(id__in=urlIds)
+        
+        return urls
 
     def getKpiAverages(self):
         try:
@@ -289,13 +338,17 @@ class UrlPath(models.Model):
     """
     Url path 'segments' and order.
     """
-    
+
     created_date = models.DateTimeField(auto_now_add=True)
     sequence = models.IntegerField(default=0, null=True, blank=True)
     path = models.CharField(max_length=255)
 
     class Meta:
         ordering = ['path',]
+
+        indexes = [
+            models.Index(fields=['path', 'sequence',]),
+        ]
 
     def __str__(self):
         return '%s: %s' % (self.path, self.sequence,)
@@ -305,7 +358,7 @@ class SearchKeyVal(models.Model):
     """
     url.location.search key -> val.
     """
-    
+
     created_date = models.DateTimeField(auto_now_add=True)
     key = models.CharField(max_length=128)
     val = models.CharField(max_length=255, null=True, blank=True)
@@ -313,19 +366,23 @@ class SearchKeyVal(models.Model):
     class Meta:
         ordering = ['key',]
 
+        indexes = [
+            models.Index(fields=['key', 'val',]),
+        ]
+
     def __str__(self):
         return '%s: %s' % (self.key, self.val,)
 
 
-class UserTimingMeasureName(models.Model):
+class Team(models.Model):
     """
-    A user-timing measure name. Used as name pointer for timing measures.
-    Allows for easy global average calculation and prevents massive 
-    duplication of timing mark names across every run.
+    Person, team, department, whatever that might be responsible for a
+    user timing measure or URL.
     """
-    
+
     created_date = models.DateTimeField(auto_now_add=True)
     name = models.CharField(max_length=255)
+    description = models.TextField(null=True, blank=True)
 
 
     class Meta:
@@ -335,13 +392,38 @@ class UserTimingMeasureName(models.Model):
         return '%s' % (self.name,)
 
 
+class UserTimingMeasureName(models.Model):
+    """
+    A user-timing measure name. Used as name pointer for timing measures.
+    Allows for easy global average calculation and prevents massive
+    duplication of timing mark names across every run.
+    """
+
+    created_date = models.DateTimeField(auto_now_add=True)
+    name = models.CharField(max_length=255)
+    description = models.TextField(null=True, blank=True)
+    team = models.ForeignKey('Team',
+                            related_name='user_timing_measure_name_team',
+                            on_delete=models.CASCADE, null=True, blank=True)
+
+    class Meta:
+        ordering = ['name']
+
+        indexes = [
+            models.Index(fields=['created_date', 'name',]),
+        ]
+
+    def __str__(self):
+        return '%s' % (self.name,)
+
+
 class UserTimingMeasure(models.Model):
     """
     A user-timing measure extracted from the related lighthouse run.
-    Dynamically generated on LighthouseDataRaw save by simply looping 
+    Dynamically generated on LighthouseDataRaw save by simply looping
     thru the report user-timing object.
     """
-    
+
     created_date = models.DateTimeField(auto_now_add=True)
     lighthouse_run = models.ForeignKey('LighthouseRun',
                             related_name='user_timing_measure_lighthouse_run',
@@ -359,6 +441,10 @@ class UserTimingMeasure(models.Model):
     class Meta:
         ordering = ['start_time']
 
+        indexes = [
+            models.Index(fields=['created_date', 'url', 'name',]),
+        ]
+
     def __str__(self):
         return '%s : %s' % (self.name, self.duration)
 
@@ -366,11 +452,11 @@ class UserTimingMeasure(models.Model):
 class UserTimingMeasureAverage(models.Model):
     """
     The average of a particular user-timing for a particular URL.
-    These are dynamically generated on LighthouseDataRaw save, by simply 
+    These are dynamically generated on LighthouseDataRaw save, by simply
     averaging all the same user-timings for the given URL.
     Only runs that are 'valid' are counted in the average.
     """
-    
+
     created_date = models.DateTimeField(auto_now_add=True)
     url = models.ForeignKey('Url',
                             related_name='user_timing_measure_avg_url',
@@ -385,6 +471,10 @@ class UserTimingMeasureAverage(models.Model):
     class Meta:
         ordering = ['start_time']
 
+        indexes = [
+            models.Index(fields=['created_date', 'url', 'name',]),
+        ]
+
     def __str__(self):
         return '%s : %s' % (self.name, self.duration)
 
@@ -395,7 +485,7 @@ class UrlKpiAverage(models.Model):
     This is created on LighthouseDataRaw save.
     Only runs that are 'valid' are counted in the average.
     """
-    
+
     created_date = models.DateTimeField(auto_now_add=True)
     url = models.ForeignKey('Url',
                             related_name='url_kpi_average_url',
@@ -425,10 +515,19 @@ class UrlKpiAverage(models.Model):
     ## REMOVE THIS after new user-timing models are POPULATED WITH THE DATA.
     masthead_onscreen = models.PositiveIntegerField(default=0)
 
-
+    class Meta:
+        indexes = [
+            models.Index(fields=['created_date', 'url',]),
+        ]
 
     def __str__(self):
         return '%s' % (self.url.url,)
+
+    def getFilteredAverages(urls):
+        try:
+          return UrlKpiAverage.objects.filter(url_id__in=list(urls.values_list('id', flat=True)))
+        except Exception as ex:
+          return UrlKpiAverage.objects.all()
 
 
 ## FUTURE USE:
@@ -467,13 +566,14 @@ class UrlKpiAverage(models.Model):
 #         super().save(*args, **kwargs)
 #
 
+
 class LighthouseDataRaw(models.Model):
     """
     The raw data object as collected from Lighthouse.
-    This is used by passing it to the lighthouse-viewer page to 
+    This is used by passing it to the lighthouse-viewer page to
     view the actual Lighthouse report.
     """
-    
+
     created_date = models.DateTimeField(auto_now_add=True)
     lighthouse_run = models.ForeignKey('LighthouseRun',
                             related_name='lighthouse_data_raw_lighthouse_run',
@@ -484,6 +584,10 @@ class LighthouseDataRaw(models.Model):
     class Meta:
         verbose_name_plural = "Lighthouse data raw"
 
+        indexes = [
+            models.Index(fields=['created_date', 'lighthouse_run',]),
+        ]
+
     def __str__(self):
         return "%s - %s" % (self.lighthouse_run, self.created_date,)
 
@@ -492,7 +596,7 @@ class LighthouseDataRaw(models.Model):
         Save the posted raw report data object to the database.
 
         """
-        
+
         ## Initially set run to be 'valid'. If the report contains a 400+ header
         ##  then we set this to 'false' so we don't bother re-calculating averages.
         validRun = True
@@ -519,13 +623,13 @@ class LighthouseDataRaw(models.Model):
                                                 report_data=report_data,)
         lighthouse_data_raw.save()
 
-        ## From https://blog.dareboost.com/en/2018/06/lighthouse-tool-chrome-devtools/ 
+        ## From https://blog.dareboost.com/en/2018/06/lighthouse-tool-chrome-devtools/
         # First ContentFul Paint: First contentful paint marks the time at which the first text/image is painted.
         # First Meaningful Paint: First Meaningful Paint measures when the primary content of a page is visible.
         # Speed Index: Speed Index shows how quickly the contents of a page are visibly populated.
         # First CPU Idle: First CPU Idle marks the first time at which the page’s main thread is quiet enough to handle input.
         # Time to Interactive: Interactive marks the time at which the page is fully interactive.
-        
+
         ## 4. Now grab the key fields we want and add them to the LighthouseRun for fast, single query.
         try:
             accessibility_score = int(report_data['categories']['accessibility']['score'] * 100)
@@ -661,20 +765,19 @@ class LighthouseDataRaw(models.Model):
         this_run.save()
 
 
-        ## TODO: ONLY calc average if run is valid. Fix with a query and flag so all code in here can just check flag.
         if validRun:
             ## 5. Get/Create the average model object and re-calc new averages including the run we just saved.
-            urlRuns = LighthouseRun.objects.filter(url=url, performance_score__gt=5, number_network_requests__gt=1, invalid_run=False)
-    
+            urlRuns = LighthouseRun.objects.validRuns()
+
             ## Seo is new, so only get average using runs that have it (>0), and for safety, set to 0 if there are none.
             urlRunsWithSeoScore = urlRuns.filter(seo_score__gt=0)
             try:
                 seoAvg = round(urlRunsWithSeoScore.aggregate(Avg('seo_score'))['seo_score__avg'])
             except Exception as ex:
                 seoAvg = 0
-    
+
             urlAvg, created = UrlKpiAverage.objects.get_or_create(url=url)
-    
+
             urlAvg.accessibility_score = round(urlRuns.aggregate(Avg('accessibility_score'))['accessibility_score__avg'])
             urlAvg.first_contentful_paint = round(urlRuns.aggregate(Avg('first_contentful_paint'))['first_contentful_paint__avg'])
             urlAvg.first_meaningful_paint = round(urlRuns.aggregate(Avg('first_meaningful_paint'))['first_meaningful_paint__avg'])
@@ -724,7 +827,7 @@ class LighthouseDataRaw(models.Model):
                     ## Should log this after logging model is setup.
                     pass
 
-                
+
                 ## Now re-calculate the average for this user-timing item, FOR THIS URL.
                 ## User-timings only happen if the page actually loaded and executed properly.
                 ## IOW: A report that was invalid and returned a 400+ HTTP response code
@@ -734,7 +837,7 @@ class LighthouseDataRaw(models.Model):
                     urlItemMeasures = UserTimingMeasure.objects.filter(url=url, name=itemName)
                     itemDurationAvg = round(urlItemMeasures.aggregate(Avg('duration'))['duration__avg'])
                     itemStartTimeAvg = round(urlItemMeasures.aggregate(Avg('start_time'))['start_time__avg'])
-    
+
                     ## Find or create an Avg record for the user-timing for this URL, then store the new avg #s.
                     itemAvgObj, created = UserTimingMeasureAverage.objects.get_or_create(url=url, name=itemName)
                     itemAvgObj.duration = itemDurationAvg
@@ -742,23 +845,26 @@ class LighthouseDataRaw(models.Model):
                     itemAvgObj.number_samples += 1
                     itemAvgObj.save()
 
-
     def __str__(self):
         return "%s - %s" % (self.lighthouse_run, self.created_date,)
 
 
 class LighthouseDataUsertiming(models.Model):
     """
-    Stores the Lighthouse report 'user-timing' JSON object that contains all the 
+    Stores the Lighthouse report 'user-timing' JSON object that contains all the
     user-timings for the associated LighthouseRun.
     """
-    
+
     created_date = models.DateTimeField(auto_now_add=True)
     lighthouse_run = models.ForeignKey('LighthouseRun',
                             related_name='lighthouse_data_usertiming_lighthouse_run',
                             on_delete=models.PROTECT)
     report_data = JSONField()
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['created_date', 'lighthouse_run',]),
+        ]
 
     def __str__(self):
         return "%s - %s" % (self.lighthouse_run, self.created_date,)
@@ -769,7 +875,7 @@ class BannerNotification(models.Model):
     Allows you to create a site-wide banner at the top of the page for site-wide
     notifications, i.e. site maintenance, problems, important updates, etc.
     """
-    
+
     name = models.CharField(max_length=255)
     active = models.BooleanField(default=False)
     banner_text = models.CharField(max_length=255)
@@ -791,12 +897,11 @@ class PageView(models.Model):
     """
     Basic page view tracking. Primarily allow you to see what pages/features are used most.
     """
-    
+
     created_date = models.DateTimeField(auto_now_add=True, editable=False)
     modified_date = models.DateTimeField(auto_now=True, editable=False)
     url = models.CharField(max_length=2000, unique=True)
     view_count = models.PositiveIntegerField(default=0)
-
 
     class Meta:
         ordering = ['-view_count']
@@ -813,7 +918,7 @@ class UrlFilterPart(models.Model):
     One or many UrlFilterParts will we used to query for urls.
 
     """
-    
+
     LOCATION_PROPS = (
         ('protocol', 'protocol',),
         ('host', 'host',),
@@ -834,8 +939,18 @@ class UrlFilterPart(models.Model):
     url_filter = models.ForeignKey('UrlFilter',
                                    related_name='url_filter_part_url_filter',
                                    on_delete=models.CASCADE)
+    
     class Meta:
         ordering = ['prop',]
+
+        indexes = [
+            models.Index(fields=[
+                'prop',
+                'filter_key',
+                'filter_path_index',
+                'filter_val',
+            ]),
+        ]
 
     def __str__(self):
         return "%s: %s => %s" % (self.prop, self.filter_key or None, self.filter_val,)
@@ -845,17 +960,24 @@ class UrlFilter(models.Model):
     """
     A named UrlFilter. Allows users to create and save a filter for reuse and shared usage.
     """
-    
+
     created_date = models.DateTimeField(auto_now_add=True, editable=False)
     modified_date = models.DateTimeField(auto_now=True, editable=False)
     name = models.CharField(max_length=255, unique=True)
     description = models.TextField(null=True, blank=True)
+    slug = models.SlugField(unique=True)
 
     class Meta:
         ordering = ['name']
 
     def __str__(self):
         return "%s" % (self.name)
+
+    def get_filter_safe(filter_slug):
+        try:
+            return UrlFilter.objects.get(slug=filter_slug)
+        except UrlFilter.DoesNotExist:
+            return None
 
     def run_query(self):
         """
@@ -865,6 +987,7 @@ class UrlFilter(models.Model):
         filter_parts = UrlFilterPart.objects.filter(url_filter=self)
 
         and_condition = Q()
+        
         for part in filter_parts:
             query_obj = self.make_query_object(part)
             and_condition.add(Q(**query_obj), Q.AND)
@@ -903,3 +1026,4 @@ class UrlFilter(models.Model):
             obj[part.prop] = part.filter_val
 
             return obj
+

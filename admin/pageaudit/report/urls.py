@@ -14,13 +14,18 @@ urlpatterns = [
     url(r'^api/urlid/$', api_urlid, name='api_urlid'),
     url(r'^api/lighthousedata/((?P<id>[\d-]+)/)?$', api_lighthouse_data, name='api_lighthouse_data'),
     url(r'^api/compareinfo/$', api_compareinfo, name='api_compareinfo'),
-    url(r'^api/home/items/$', api_home_items, name='api_home_items'),
+    url(r'^api/browse/items/$', api_browse_items, name='api_browse_items'),
     url(r'^api/urltypeahead/$', api_url_typeahead, name='api_url_typeahead'),
-    
+    url(r'^api/chart/scores/$', api_chart_scores, name='api_chart_scores'),
+    url(r'^api/table/kpis/$', api_table_kpis, name='api_table_kpis'),
+        
     ## Core pages.
+    ## Regex on browse and dashboard allow capture of just the filter slug, excluding the /.
+    ## Need this for URL reverses in templates.
     url(r'^$', home, name='home'),
     url(r'^browse/$', reports_browse, name='reports_browse'),
     url(r'^dashboard/$', reports_dashboard, name='reports_dashboard'),
+    url(r'^filters/$', reports_filters, name='reports_filters'),
     url(r'^urls/detail/(?P<id>[\d-]+)/$', reports_urls_detail, name='reports_urls_detail'),
     
     ## Compare page.

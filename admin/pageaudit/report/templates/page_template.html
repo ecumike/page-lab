@@ -53,13 +53,15 @@
                 // Can't do Django vars in static files, so we set it in the template like this.
                 window.PL = {
                     'urls': {
-                        'static_path': '{% get_static_prefix %}',
+                        'api_chart_scores': '{% url 'plr:api_chart_scores' %}',
                         'api_compareinfo': '{% url 'plr:api_compareinfo' %}',
-                        'api_urlid': '{% url 'plr:api_urlid' %}',
                         'api_lighthouse_data': '{% url 'plr:api_lighthouse_data' %}',
+                        'api_table_kpis': '{% url 'plr:api_table_kpis' %}',
                         'api_url_typeahead': '{% url 'plr:api_url_typeahead' %}',
+                        'api_urlid': '{% url 'plr:api_urlid' %}',
                         'home': '{% url 'plr:home' %}',
                         'report_lighthouse_viewer': '{% url 'plr:report_lighthouse_viewer' %}',
+                        'static_path': '{% get_static_prefix %}',
                     }
                 };
             </script>
@@ -82,11 +84,12 @@
         
         <main role="main" aria-label="PageLab content">
 
-            <nav class="{{ templateHelpers.classes.horizontalSpace }} pl-sitenav bg-black bb">
+            <nav class="{{ templateHelpers.classes.horizontalSpace }} pl-sitenav bg-black bb cf">
                 <a class="{{ templateHelpers.classes.navItem }} {{ templateHelpers.classes.siteColor }} b" href="{% url 'plr:home' %}">PageLab</a>
                 <a class="{{ templateHelpers.classes.navItem }} {% block menuHomeClass %}{% endblock %}" href="{% url 'plr:home' %}">Find reports</a>
-                <a class="{{ templateHelpers.classes.navItem }} {% block menuBrowsereportsClass %}{% endblock %}" href="{% url 'plr:reports_browse' %}">Browse reports</a>
-                <a class="{{ templateHelpers.classes.navItem }} {% block menuDashboardClass %}{% endblock %}" href="{% url 'plr:reports_dashboard' %}">Dashboard</a>
+                <a class="{{ templateHelpers.classes.navItem }} {% block menuBrowsereportsClass %}{% endblock %}" href="{% url 'plr:reports_browse' %}{% if filterSlug %}?filter={{ filterSlug }}{% endif %}">Browse reports</a>
+                <a class="{{ templateHelpers.classes.navItem }} {% block menuDashboardClass %}{% endblock %}" href="{% url 'plr:reports_dashboard' %}{% if filterSlug %}?filter={{ filterSlug }}{% endif %}">Dashboard</a>
+                <a class="{{ templateHelpers.classes.navItem }} {% block menuFiltersClass %}{% endblock %}" href="{% url 'plr:reports_filters' %}">Filters</a>
                 
                 {% get_flatpages as flatpages %}
                 {% for page in flatpages %}
@@ -114,11 +117,11 @@
             {% define "40" as imgsize %}
             <div class="tr-ns mb3 mt5 tl {{ templateHelpers.classes.grid }}">
                 <p class="mb2">Made with</p>
-                <div>
-                    <a class="dib mr2 " href="https://www.nodejs.org/" target="_blank"><img src="{% static 'report/img/nodejs.svg' %}" width="{{imgsize}}" height="{{imgsize}}" title="Nodejs is an asynchronous event driven JavaScript runtime" alt="Made with Node"></a>
-                    <a class="dib mr2 " href="https://redis.io/" target="_blank"><img src="{% static 'report/img/redis.svg' %}" width="{{imgsize}}" height="{{imgsize}}" title="Redis is an open source (BSD licensed), in-memory data structure store, used as a database, cache and message broker" alt="Made with Redis"></a>
-                    <a class="dib mr2 " href="https://www.postgresql.org/" target="_blank"><img src="{% static 'report/img/postgresql.png' %}" width="{{imgsize}}" height="{{imgsize}}" title="PostgreSQL: The world's most advanced open source relational database" alt="Made with PostgreSQL"></a>
-                    <a class="dib" href="https://www.djangoproject.com/" target="_blank"><img src="{% static 'report/img/django.svg' %}" width="31" height="{{imgsize}}" title="Django makes it easier to build better Web apps more quickly and with less code." alt="Made with Django"></a>
+                <div class="flex justify-end-ns">
+                    <a class="mr2" href="https://www.nodejs.org/" target="_blank"><img src="{% static 'report/img/nodejs.svg' %}" width="{{imgsize}}" height="{{imgsize}}" title="Nodejs is an asynchronous event driven JavaScript runtime" alt="Made with Node"></a>
+                    <a class="mr2" href="https://redis.io/" target="_blank"><img src="{% static 'report/img/redis.svg' %}" width="{{imgsize}}" height="{{imgsize}}" title="Redis is an open source (BSD licensed), in-memory data structure store, used as a database, cache and message broker" alt="Made with Redis"></a>
+                    <a class="mr2" href="https://www.postgresql.org/" target="_blank"><img src="{% static 'report/img/postgresql.png' %}" width="{{imgsize}}" height="{{imgsize}}" title="PostgreSQL: The world's most advanced open source relational database" alt="Made with PostgreSQL"></a>
+                    <a href="https://www.djangoproject.com/" target="_blank"><img src="{% static 'report/img/django.svg' %}" width="31" height="{{imgsize}}" title="Django makes it easier to build better Web apps more quickly and with less code." alt="Made with Django"></a>
                 </div>
             </div>
         </main>

@@ -2,18 +2,18 @@
 {% load beautify %}
 {% load static %}
 
-                <table>
+                <table class="collapse mw-100">
                     <tbody>
                         <tr>
                             <td class="b" style="width:230px;"></td>
-                            <td class="{{ templateHelpers.classes.tableListCell }}"><img src="data:image/png;base64,{{ url1.lighthouse_run.thumbnail_image }}" width="150" class="pl-downsize {{ templateHelpers.classes.imageBorder }}"></td>
-                            <td class="{{ templateHelpers.classes.tableListCell }}"><img src="data:image/png;base64,{{ url2.lighthouse_run.thumbnail_image }}" width="150" class="pl-downsize {{ templateHelpers.classes.imageBorder }}"></td>
+                            <td class="{{ templateHelpers.classes.tableListCell }}"><img src="data:image/png;base64,{{ url1.lighthouse_run.thumbnail_image }}" width="150" class="pl-downsize {{ templateHelpers.classes.imageBorder }}" alt="Web page screenshot"></td>
+                            <td class="{{ templateHelpers.classes.tableListCell }}"><img src="data:image/png;base64,{{ url2.lighthouse_run.thumbnail_image }}" width="150" class="pl-downsize {{ templateHelpers.classes.imageBorder }}" alt="Web page screenshot"></td>
                         </tr>
                         
                         <tr>
                             <td class="b {{ templateHelpers.classes.tableListCell }}"></td>
-                            <td class=" {{ templateHelpers.classes.tableListCell }}"><a class="pl-word-break-all {{ templateHelpers.classes.hasIcon }}" href="{{ url1.url }}" target="_blank" title="Visit page in new window">{{ url1.url|noprotocol }} {{ templateHelpers.html.icons.newWindow|safe }}</a></td>
-                            <td class=" {{ templateHelpers.classes.tableListCell }}"><a class="pl-word-break-all {{ templateHelpers.classes.hasIcon }}" href="{{ url2.url }}" target="_blank" title="Visit page in new window">{{ url2.url|noprotocol }} {{ templateHelpers.html.icons.newWindow|safe }}</a></td>
+                            <td class=" {{ templateHelpers.classes.tableListCell }}"><a class="pl-word-break-all {{ templateHelpers.classes.hasIcon }}" href="{{ url1.url }}" target="_blank" title="Visit page in new window">{{ url1.url|noprotocol }} <span class="pt1 ml2">{{ templateHelpers.html.icons.newWindow|safe }}</span></a></td>
+                            <td class=" {{ templateHelpers.classes.tableListCell }}"><a class="pl-word-break-all {{ templateHelpers.classes.hasIcon }}" href="{{ url2.url }}" target="_blank" title="Visit page in new window">{{ url2.url|noprotocol }} <span class="pt1 ml2">{{ templateHelpers.html.icons.newWindow|safe }}</span></a></td>
                         </tr>
                         
                         <tr>
