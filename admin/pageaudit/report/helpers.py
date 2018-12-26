@@ -184,4 +184,3 @@ def lighthouseRunsByDate(LighthouseRunQueryset, startDate=None, endDate=None):
 
     return LighthouseRunQueryset
     
-
